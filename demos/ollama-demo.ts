@@ -18,7 +18,7 @@ async function main() {
       apiBaseUrl: process.env.OLLAMA_OPENAI_API_BASE,
       debug: false
     },
-    'codellama:70b'
+    'codellama:7b'
   )
 
   const prompt = 'can you understand "this" pointer. Explain in brief.'
