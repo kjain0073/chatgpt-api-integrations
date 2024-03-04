@@ -11,6 +11,7 @@
 - [Usage](#usage)
   - [Usage - ChatGPTAPI](#usage---chatgptapi)
   - [Usage - Azure ChatGPT API](#usage---azure-chatgpt-api)
+  - [Usage - Ollama ChatGPT API](#usage---ollama-chatgpt-api)
   - [Usage - ChatGPTUnofficialProxyAPI](#usage---chatgptunofficialproxyapi)
     - [Reverse Proxy](#reverse-proxy)
     - [Access Token](#access-token)
@@ -370,6 +371,28 @@ async function main() {
     apiKey: process.env.AZURE_OPENAI_API_KEY,
     apiBaseUrl: process.env.AZURE_OPENAI_API_BASE,
     debug: false},'chatgpt')
+
+  const prompt = 'can you understand "this" pointer'
+
+  const res = await oraPromise(api.sendMessage(prompt), {
+    text: prompt
+  })
+  console.log(res.text)
+}
+```
+
+### Usage - Ollama ChatGPT API
+
+It is based on ChatGPT API, usage is almost the same. 
+
+To start, it needs one additional parameter, deployModel, which is the deployment name of your Ollama model.
+
+```ts
+async function main() {
+  const api = new OllamaChatGPTAPI({
+    apiKey: process.env.OLLAMA_OPENAI_API_KEY,
+    apiBaseUrl: process.env.OLLAMA_OPENAI_API_BASE,
+    debug: false},'codellama:7b')
 
   const prompt = 'can you understand "this" pointer'
 
