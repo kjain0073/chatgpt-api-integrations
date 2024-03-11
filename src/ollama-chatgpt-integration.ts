@@ -77,7 +77,6 @@ export class OllamaChatGPTAPI {
       stop: ['<|im_end|>'],
       ...completionParams
     }
-    console.log('Hi this model is ', this._completionParams.model)
     this._systemMessage = systemMessage
 
     if (this._systemMessage === undefined) {
@@ -176,22 +175,22 @@ export class OllamaChatGPTAPI {
       async (resolve, reject) => {
         const url = `${this._apiBaseUrl}/api/chat`
 
-        console.log(`\r\n ${url}`)
+        console.log(`\r\n API URL: ${url}`)
 
         const headers = {
           'Content-Type': 'application/json',
           'api-key': this._apiKey || 'ollama'
         }
 
-        console.log(`\r\n ${this._apiKey || 'ollama'}`)
+        console.log(`\r\n API KEY: ${this._apiKey || 'ollama'}`)
 
-        console.log(`\r\n ${messages[1].content}`)
+        console.log(`\r\n Content: ${messages[1].content}`)
 
-        console.log(`\r\n ${messages[1].name}`)
+        console.log(`\r\n Name: ${messages[1].name}`)
 
-        console.log(`\r\n ${messages[1].role}`)
+        console.log(`\r\n Role: ${messages[1].role}`)
 
-        console.log(`\r\n ${stream}`)
+        console.log(`\r\n Is streaming?: ${stream}`)
 
         const options = {
           temperature: 0.8,
@@ -205,7 +204,7 @@ export class OllamaChatGPTAPI {
           model: this._deployModel || CHATGPT_MODEL,
           messages,
           options,
-          stream
+          stream: false
         }
 
         if (this._debug) {
@@ -249,7 +248,7 @@ export class OllamaChatGPTAPI {
           ).catch(reject)
         } else {
           try {
-            console.log(JSON.stringify(ollamaBody))
+            console.log(`\r\n request: ${JSON.stringify(ollamaBody)}`)
 
             let prompts: string = ''
 
@@ -259,7 +258,7 @@ export class OllamaChatGPTAPI {
 
             prompts = `${prompts}\n<|im_start|>assistant\n`
 
-            console.log(JSON.stringify(prompts))
+            console.log(`\r\n prompt: ${JSON.stringify(prompts)}`)
 
             const azureBody = {
               max_tokens: maxTokens,
@@ -288,10 +287,10 @@ export class OllamaChatGPTAPI {
 
             const response: any = await res.json()
             if (this._debug) {
-              console.log(response)
+              console.log(`\r\n debug is: ${response}`)
             }
 
-            console.log(response)
+            console.log(`\r\n debug is: ${response}`)
 
             if (response?.id) {
               result.id = response.id
