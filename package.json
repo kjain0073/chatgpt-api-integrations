@@ -1,6 +1,6 @@
 {
   "name": "@kjain0073/ollamachatgptapi",
-  "version": "0.1.3",
+  "version": "1.0.0",
   "description": "Azure ChatGPT Wrapper Demo based on Travis Fischer <travis@transitivebullsh.it> 's work on ChatGPTAPI",
   "author": "fauna179@hotmail.com",
   "repository": {

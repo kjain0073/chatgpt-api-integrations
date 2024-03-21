@@ -32,6 +32,7 @@ export class OllamaChatGPTAPI {
 
   protected _messageStore: Keyv<types.ChatMessage>
   protected _deployModel: string
+  protected _requestBodyType: string
 
   /**
    * Creates a new client wrapper around Azure OpenAI's chat completion API, mimicing the official ChatGPT webapp's functionality as closely as possible.
@@ -39,7 +40,7 @@ export class OllamaChatGPTAPI {
    * @param apiKey - Ollama API key (optional).
    * @param apiBaseUrl - Ollama API base URL (required).
    * @param debug - Optional enables logging debugging info to stdout.
-   * @param completionParams - Param overrides to send to the [OpenAI chat completion API](https://platform.openai.com/docs/api-reference/chat/create). Options like `temperature` and `presence_penalty` can be tweaked to change the personality of the assistant.
+   * @param completionParams - Param overrides to send to the [OpenAI chat completion API](https://platform.openai.com/docs/api-reference/chat/create). Options like `temperature` and `frequency_penalty` can be tweaked to change the personality of the assistant.
    * @param maxModelTokens - Optional override for the maximum number of tokens allowed by the model's context. Defaults to 4096.
    * @param maxResponseTokens - Optional override for the minimum number of tokens allowed for the model's response. Defaults to 1000.
    * @param messageStore - Optional [Keyv](https://github.com/jaredwray/keyv) store to persist chat messages to. If not provided, messages will be lost when the process exits.
@@ -48,7 +49,11 @@ export class OllamaChatGPTAPI {
    * @param fetch - Optional override for the `fetch` implementation to use. Defaults to the global `fetch` function.
    * @param deployModel - specify ollama model to use (default: codellama:7b)
    */
-  constructor(opts: types.ChatGPTAPIOptions, deployModel: string) {
+  constructor(
+    opts: types.ChatGPTAPIOptions,
+    deployModel: string,
+    requestType: string
+  ) {
     const {
       apiKey,
       apiBaseUrl,
@@ -68,15 +73,15 @@ export class OllamaChatGPTAPI {
     this._debug = !!debug
     this._fetch = fetch
     this._deployModel = deployModel
+    this._requestBodyType = requestType
 
     this._completionParams = {
       model: this._deployModel || CHATGPT_MODEL,
-      temperature: 0.8,
-      top_p: 1.0,
-      presence_penalty: 1.0,
-      stop: ['<|im_end|>'],
       ...completionParams
     }
+    console.log(
+      `\r\n Completion Params: ${JSON.stringify(this._completionParams)}`
+    )
     this._systemMessage = systemMessage
 
     if (this._systemMessage === undefined) {
@@ -159,10 +164,8 @@ export class OllamaChatGPTAPI {
     }
     await this._upsertMessage(message)
 
-    const { messages, maxTokens, numTokens } = await this._buildMessages(
-      text,
-      opts
-    )
+    const { messages, prompt, maxTokens, numTokens } =
+      await this._buildMessages(text, opts)
 
     const result: types.ChatMessage = {
       role: 'assistant',
@@ -173,7 +176,11 @@ export class OllamaChatGPTAPI {
 
     const responseP = new Promise<types.ChatMessage>(
       async (resolve, reject) => {
-        const url = `${this._apiBaseUrl}/api/chat`
+        const endpoint =
+          this._requestBodyType === types.RequestBodyType.Chat
+            ? `api/chat`
+            : `api/generate`
+        const url = `${this._apiBaseUrl}/${endpoint}`
 
         console.log(`\r\n API URL: ${url}`)
 
@@ -182,33 +189,52 @@ export class OllamaChatGPTAPI {
           'api-key': this._apiKey || 'ollama'
         }
 
-        console.log(`\r\n API KEY: ${this._apiKey || 'ollama'}`)
+        // console.log(`\r\n API KEY: ${this._apiKey || 'ollama'}`)
 
         console.log(`\r\n Content: ${messages[1].content}`)
 
-        console.log(`\r\n Name: ${messages[1].name}`)
+        // console.log(`\r\n Name: ${messages[1].name}`)
 
-        console.log(`\r\n Role: ${messages[1].role}`)
+        // console.log(`\r\n Role: ${messages[1].role}`)
 
-        console.log(`\r\n Is streaming?: ${stream}`)
+        // console.log(`\r\n Is streaming?: ${stream}`)
 
         const options = {
-          temperature: 0.8,
-          top_p: 1.0,
-          repeat_penalty: 1.0,
-          stop: ['<|im_end|>'],
+          temperature: this._completionParams?.temperature || 0.8,
+          top_p: this._completionParams?.top_p || 0.9,
+          repeat_penalty: this._completionParams?.frequency_penalty || 1.1,
+          stop: this._completionParams?.stop || ['<|im_end|>'],
           num_predict: maxTokens
         }
 
-        const ollamaBody = {
+        const requestBodyType = this._requestBodyType
+        console.log(`\r\n Request Body Type: ${requestBodyType}`)
+        let prompt_v1: string = ''
+
+        messages.forEach((e) => {
+          prompt_v1 = `${prompt_v1}\n<|im_start|>${e.role}\n${e.content}\n<|im_end|>`
+        })
+
+        prompt_v1 = `${prompt_v1}\n<|im_start|>assistant\n`
+        const ollamaChatBody = {
           model: this._deployModel || CHATGPT_MODEL,
           messages,
           options,
           stream: false
         }
 
+        const ollamaPromptBody = {
+          model: this._deployModel || CHATGPT_MODEL,
+          prompt:
+            requestBodyType === types.RequestBodyType.PromptV1
+              ? prompt_v1
+              : prompt,
+          options,
+          stream: false
+        }
+
         if (this._debug) {
-          console.log(`sendMessage (${numTokens} tokens)`, ollamaBody)
+          console.log(`sendMessage (${numTokens} tokens)`, ollamaChatBody)
         }
 
         if (stream) {
@@ -217,7 +243,11 @@ export class OllamaChatGPTAPI {
             {
               method: 'POST',
               headers,
-              body: JSON.stringify(ollamaBody),
+              body: JSON.stringify(
+                requestBodyType === types.RequestBodyType.Chat
+                  ? ollamaChatBody
+                  : ollamaPromptBody
+              ),
               signal: abortSignal,
               onMessage: (data: string) => {
                 try {
@@ -227,9 +257,9 @@ export class OllamaChatGPTAPI {
                     result.id = response.id
                   }
 
-                  if (response.message) {
-                    result.role = response.message.role
-                    result.text += response.message.content
+                  if (response.message || response.response) {
+                    result.role = response.message.role || 'assistant'
+                    result.text += response.message.content || response.response
                   }
 
                   if (response.done) {
@@ -248,29 +278,22 @@ export class OllamaChatGPTAPI {
           ).catch(reject)
         } else {
           try {
-            console.log(`\r\n request: ${JSON.stringify(ollamaBody)}`)
-
-            let prompts: string = ''
-
-            ollamaBody.messages.forEach((e) => {
-              prompts = `${prompts}\n<|im_start|>${e.role}\n${e.content}\n<|im_end|>`
-            })
-
-            prompts = `${prompts}\n<|im_start|>assistant\n`
-
-            console.log(`\r\n prompt: ${JSON.stringify(prompts)}`)
-
-            const azureBody = {
-              max_tokens: maxTokens,
-              ...this._completionParams,
-              prompt: prompts,
-              stream
-            }
+            console.log(
+              `\r\n request: ${JSON.stringify(
+                requestBodyType === types.RequestBodyType.Chat
+                  ? ollamaChatBody
+                  : ollamaPromptBody
+              )}`
+            )
 
             const res = await this._fetch(url, {
               method: 'POST',
               headers,
-              body: JSON.stringify(ollamaBody),
+              body: JSON.stringify(
+                requestBodyType === types.RequestBodyType.Chat
+                  ? ollamaChatBody
+                  : ollamaPromptBody
+              ),
               signal: abortSignal
             })
 
@@ -287,20 +310,24 @@ export class OllamaChatGPTAPI {
 
             const response: any = await res.json()
             if (this._debug) {
-              console.log(`\r\n debug is: ${response}`)
+              console.log(
+                `\r\n debug is true and response: ${JSON.stringify(response)}`
+              )
             }
 
-            console.log(`\r\n debug is: ${response}`)
+            console.log(
+              `\r\n debug is false and response: ${JSON.stringify(response)}`
+            )
 
             if (response?.id) {
               result.id = response.id
             }
 
-            if (response?.message) {
-              const message = response.message
-              result.text = message.content
+            if (response?.message || response?.response) {
+              const message = response.message || response.response
+              result.text = message.content || message
               if (message.role) {
-                result.role = message.role
+                result.role = message.role || 'assistant'
               }
             } else {
               const res = response as any
@@ -379,9 +406,10 @@ export class OllamaChatGPTAPI {
         ])
       : messages
     let numTokens = 0
+    let prompt = ''
 
     do {
-      const prompt = nextMessages
+      prompt = nextMessages
         .reduce((prompt, message) => {
           switch (message.role) {
             case 'system':
@@ -438,7 +466,7 @@ export class OllamaChatGPTAPI {
       Math.min(this._maxModelTokens - numTokens, this._maxResponseTokens)
     )
 
-    return { messages, maxTokens, numTokens }
+    return { messages, prompt, maxTokens, numTokens }
   }
 
   protected async _getTokenCount(text: string) {

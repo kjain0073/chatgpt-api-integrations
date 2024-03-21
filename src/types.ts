@@ -2,6 +2,12 @@ import Keyv from 'keyv'
 
 export type Role = 'user' | 'assistant' | 'system'
 
+export enum RequestBodyType {
+  Chat = 'chat',
+  PromptV1 = 'prompt_v1', //<im_start><im_end>
+  PromptV2 = 'prompt_v2' // Instructions: User: Assistant:
+}
+
 export type FetchFn = typeof fetch
 
 export type ChatGPTAPIOptions = {
